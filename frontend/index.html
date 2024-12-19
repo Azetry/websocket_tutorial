@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .chat-container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .message-container {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .sent {
+            background-color: #e3f2fd;
+            margin-left: 20%;
+        }
+        .received {
+            background-color: #f5f5f5;
+            margin-right: 20%;
+        }
+        .input-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 5px;
+        }
+        button {
+            padding: 5px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background-color: #cccccc;
+        }
+        .status {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <h2>WebSocket Chat</h2>
+        <div>
+            <input type="text" id="clientId" placeholder="Your ID">
+            <input type="text" id="recipientId" placeholder="Recipient ID">
+            <button onclick="connect()" id="connectBtn">Connect</button>
+        </div>
+        
+        <div class="chat-container">
+            <div class="message-container" id="messages"></div>
+            <div class="status" id="status">Disconnected</div>
+            <div class="input-container">
+                <input type="text" id="messageInput" placeholder="Type your message..." disabled>
+                <button onclick="sendMessage()" id="sendBtn" disabled>Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let clientId = '';
+        
+        function connect() {
+            clientId = document.getElementById('clientId').value.trim();
+            const recipientId = document.getElementById('recipientId').value.trim();
+            
+            if (!clientId || !recipientId) {
+                alert('Please enter both IDs');
+                return;
+            }
+            
+            // 關閉現有連接
+            if (ws) {
+                ws.close();
+            }
+            
+            // 建立新的 WebSocket 連接
+            ws = new WebSocket(`ws://localhost:8000/ws/${clientId}`);
+            
+            ws.onopen = () => {
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('messageInput').disabled = false;
+                document.getElementById('sendBtn').disabled = false;
+                document.getElementById('clientId').disabled = true;
+                document.getElementById('recipientId').disabled = true;
+                document.getElementById('connectBtn').disabled = true;
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.status === 'error') {
+                    appendMessage(`Error: ${data.message}`, 'status');
+                    return;
+                }
+                
+                if (data.status === 'delivered') {
+                    // 發送的消息確認
+                    appendMessage(`You: ${data.content}`, 'sent');
+                } else {
+                    // 收到的消息
+                    appendMessage(`${data.sender_id}: ${data.content}`, 'received');
+                }
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('messageInput').disabled = true;
+                document.getElementById('sendBtn').disabled = true;
+                document.getElementById('clientId').disabled = false;
+                document.getElementById('recipientId').disabled = false;
+                document.getElementById('connectBtn').disabled = false;
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                appendMessage('WebSocket error occurred', 'status');
+            };
+        }
+        
+        function sendMessage() {
+            if (!ws) return;
+            
+            const messageInput = document.getElementById('messageInput');
+            const recipientId = document.getElementById('recipientId').value;
+            const content = messageInput.value.trim();
+            
+            if (!content) return;
+            
+            const message = {
+                recipient_id: recipientId,
+                content: content,
+                timestamp: new Date().toISOString()
+            };
+            
+            ws.send(JSON.stringify(message));
+            messageInput.value = '';
+        }
+        
+        function appendMessage(message, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${type}`;
+            messageElement.textContent = message;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // 監聽 Enter 鍵發送消息
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
